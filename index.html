@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>校园循环摆渡车</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        #container{width:100vw;height:100vh;}
+        .tip{
+            position:absolute;top:12px;left:12px;
+            background:#fff;z-index:999;padding:10px;border-radius:8px;
+            box-shadow:0 2px 8px #0002;
+        }
+    </style>
+    <!-- 高德安全密钥配置 -->
+    <script>
+        window._AMapSecurityConfig = {
+            securityJsCode:"1bdfec99976921b13b6f44b79b03b078",
+        }
+    </script>
+    <!-- 引入高德JSAPI，填入你的key -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=194c01c5a00e76a1d83d45929fd109c4"></script>
+</head>
+<body>
+    <div class="tip">🚌校园循环摆渡车｜无固定发车时刻，招手即停</div>
+    <div id="container"></div>
+<script>
+// ========== 基础配置 ==========
+const schoolCenter = [112.720609, 37.75017];
+// 你的校园边界bounds
+const sw = [112.714494, 37.743930];  //西南角
+const ne = [112.726724, 37.756411];   //东北角
+const campusBounds = new AMap.Bounds(sw, ne);
+
+let map = new AMap.Map("container",{
+    center: schoolCenter,
+    zoom:15,
+    viewMode:"2D"
+});
+
+// 【限制拖拽，不能拖出校园范围】
+map.setLimitBounds(campusBounds);
+
+// ========== 黑色遮罩：四点以外全部涂黑 ==========
+// 超大外框，中间挖掉校园矩形
+const maskPolygon = new AMap.Polygon({
+    path: [
+        //外层全世界大矩形
+        [ [ -180, -90 ], [180, -90], [180,90], [-180,90] ],
+        //内部挖空：你的校园四点
+        [ sw, [ne[0], sw[1]], ne, [sw[0], ne[1]] ]
+    ],
+    fillColor: "#000000",
+    fillOpacity:1,
+    strokeOpacity:0,
+    zIndex: 5
+})
+map.add(maskPolygon);
+
+// ========== 自定义校园图片底图（你的四角坐标） ==========
+let imageLayer = new AMap.ImageLayer({
+    url: "./campus.jpg",
+    bounds: campusBounds,
+    zooms: [12,20],
+    zIndex: 6, //图片放在遮罩上层
+    opacity: 0.7
+})
+map.add(imageLayer);
+
+// 点击地图，控制台输出经纬度，采集站点用
+map.on('click',e=>{
+    console.log(`[${e.lnglat.getLng()},${e.lnglat.getLat()}],`)
+})
+
+// ========== 摆渡车模拟逻辑 ==========
+// 根据progress在线路上插值获取坐标
+function getPointByProgress(progress, path) {
+  const totalLen = path.length -1;
+  let idx = Math.floor(progress * totalLen);
+  idx = Math.min(idx, totalLen-1);
+  const p1 = path[idx];
+  const p2 = path[idx+1];
+  const subP = (progress*totalLen) - idx;
+  const lng = p1[0] + (p2[0]-p1[0])*subP;
+  const lat = p1[1] + (p2[1]-p1[1])*subP;
+  return [lng,lat];
+}
+
+// 车辆行驶轨迹（保留，小车移动依赖这条路线，只是不画蓝线）
+const routePath = [
+    [112.7160,37.7445],
+    [112.7210,37.7448],
+    [112.7255,37.7490],
+    [112.7230,37.7550],
+    [112.7165,37.7545],
+    [112.7152,37.7440]
+]
+
+//车辆数据
+let busList = [
+    {id:1, name:"1号摆渡车", progress:0, status:"运行中", marker:null},
+    {id:2, name:"2号摆渡车", progress:0.4, status:"运行中", marker:null}
+]
+
+//初始化小车标记
+busList.forEach(bus=>{
+    let pos = getPointByProgress(bus.progress, routePath);
+    bus.marker = new AMap.Marker({
+        position:pos,
+        title:bus.name,
+        icon:"https://a.amap.com/jsapi_demos/static/demo-center/icons/bus.png",
+        map:map,
+        zIndex:10
+    })
+})
+
+//定时更新车辆位置
+function updateBus(){
+    busList.forEach(bus=>{
+        bus.progress += 0.002;
+        if(bus.progress>1) bus.progress = 0;
+        let pos = getPointByProgress(bus.progress, routePath);
+        bus.marker.setPosition(pos);
+    })
+}
+setInterval(updateBus,3000);
+
+</script>
+</body>
+</html>
